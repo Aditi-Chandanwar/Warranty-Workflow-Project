@@ -23,8 +23,11 @@ function createApp() {
       .json({ success: false, message: "Resource not found", data: null });
   });
 
-  // Centralized error middleware added in Validation Layer step:
-  // app.use(require('../utils/errorHandler'));
+ // ----- Centralized error-handling middleware -----
+  // Must be registered AFTER all routes (Express convention: 4-arg middleware
+  // is only treated as an error handler when placed last in the chain).
+  const { errorHandler } = require('../utils/errorHandler');
+  app.use(errorHandler);
 
   return app;
 }

@@ -1,0 +1,22 @@
+{
+  "name": "warranty-failure-management-system",
+  "version": "1.0.0",
+  "description": "Internal Warranty Failure Management System for automotive manufacturing warranty claim tracking, analysis, and reporting.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "migrate": "node database/migrate.js",
+    "seed": "node database/seed.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.21.0",
+    "exceljs": "^4.4.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

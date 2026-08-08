@@ -258,11 +258,100 @@ async function findAll(options) {
   };
 }
 
+// Maps a validated dashboard breakdown key to its underlying column.
+// 'month' groups by claim_failure_month per the "Failure Month Trend" chart.
+const BREAKDOWN_COLUMN_MAP = {
+  customer: 'customer',
+  rootCause: 'root_cause',
+  month: 'claim_failure_month',
+  batchCode: 'switch_batch_code',
+  vehicleModel: 'vehicle_model',
+  status: 'status',
+};
+
+/**
+ * Applies the same active + filter WHERE clause used by findAll(), shared
+ * here so summary/breakdown queries stay consistent with the Records list.
+ */
+function buildFilterClause(filters = {}) {
+  const whereClauses = [ACTIVE_CLAUSE];
+  const params = [];
+
+  const filterColumnMap = {
+    customer: 'customer',
+    vehicleModel: 'vehicle_model',
+    batchCode: 'switch_batch_code',
+    rootCause: 'root_cause',
+    status: 'status',
+    reportingMonth: 'reporting_month',
+  };
+
+  for (const [filterKey, column] of Object.entries(filterColumnMap)) {
+    const value = filters[filterKey];
+    if (value) {
+      whereClauses.push(`${column} = ?`);
+      params.push(value);
+    }
+  }
+
+  return { whereSql: whereClauses.join(' AND '), params };
+}
+
+/**
+ * Returns dashboard summary counts: total records, total quantity, accepted
+ * and rejected case counts (based on ji_decision), scoped by optional filters.
+ */
+async function getSummary(filters = {}) {
+  const { whereSql, params } = buildFilterClause(filters);
+
+  const sql = `
+    SELECT
+      COUNT(*) AS totalRecords,
+      COALESCE(SUM(quantity), 0) AS totalQuantity,
+      COALESCE(SUM(CASE WHEN ji_decision = 'Accepted' THEN 1 ELSE 0 END), 0) AS acceptedCases,
+      COALESCE(SUM(CASE WHEN ji_decision = 'Rejected' THEN 1 ELSE 0 END), 0) AS rejectedCases
+    FROM warranty_records
+    WHERE ${whereSql}
+  `;
+
+  const rows = await db.query(sql, params);
+  return rows[0];
+}
+
+/**
+ * Returns a quantity breakdown grouped by the given dashboard breakdown key
+ * (e.g. 'customer', 'rootCause'), scoped by optional filters. Records with a
+ * null/blank grouping value are labeled 'Unspecified' rather than dropped.
+ */
+async function getBreakdown(byKey, filters = {}) {
+  const column = BREAKDOWN_COLUMN_MAP[byKey];
+  if (!column) {
+    throw new Error(`Unsupported breakdown key: ${byKey}`);
+  }
+
+  const { whereSql, params } = buildFilterClause(filters);
+
+  const sql = `
+    SELECT
+      COALESCE(NULLIF(TRIM(${column}), ''), 'Unspecified') AS label,
+      COALESCE(SUM(quantity), 0) AS quantity,
+      COUNT(*) AS recordCount
+    FROM warranty_records
+    WHERE ${whereSql}
+    GROUP BY label
+    ORDER BY quantity DESC
+  `;
+
+  return db.query(sql, params);
+}
+
 module.exports = {
   create,
   findById,
   update,
   softDelete,
   findAll,
-  mapRowToRecord, // exported for reuse by dashboard/analytics repository queries later
+  getSummary,
+  getBreakdown,
+  mapRowToRecord,
 };
